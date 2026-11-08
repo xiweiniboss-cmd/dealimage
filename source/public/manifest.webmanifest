@@ -1,0 +1,33 @@
+{
+  "name": "OCR 底纹",
+  "short_name": "OCR 底纹",
+  "description": "完全浏览器本地处理的图片 OCR 混淆工具，无上传，无服务端。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f6f7",
+  "theme_color": "#f4f6f7",
+  "lang": "zh-CN",
+  "categories": ["utilities", "photo"],
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OCR 混淆图像处理器">
+  <rect width="512" height="512" rx="112" fill="#f5f1e8"/>
+  <rect x="88" y="108" width="336" height="296" rx="38" fill="#fffdf7" stroke="#202528" stroke-width="20"/>
+  <path d="M132 178h248M132 238h132M132 298h248M132 358h176" fill="none" stroke="#182024" stroke-width="24" stroke-linecap="round"/>
+  <path d="M314 218c28-18 76-16 102 6M300 286c42 24 82 24 122 0M324 348c24-16 58-16 88 2" fill="none" stroke="#0e7a75" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="352" cy="144" r="20" fill="#b35c2e"/>
+</svg>
