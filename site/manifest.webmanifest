@@ -1,13 +1,13 @@
 {
   "name": "OCR 底纹",
   "short_name": "OCR 底纹",
-  "description": "完全浏览器本地处理的图片 OCR 混淆工具，无上传，无服务端。",
+  "description": "在浏览器本地给截图加抗识别底纹。图片不上传。",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f4f6f7",
-  "theme_color": "#f4f6f7",
+  "background_color": "#07140e",
+  "theme_color": "#07140e",
   "lang": "zh-CN",
   "categories": ["utilities", "photo"],
   "icons": [

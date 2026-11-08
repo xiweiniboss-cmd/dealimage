@@ -1,4 +1,3 @@
-<!-- 从线上压缩包 index-I5qFkFm0.js 里的 Vue 3 组件还原。模板结构、class、文案、逻辑与原版一致，变量名为我起的。 -->
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 
@@ -14,16 +13,17 @@ const dragging = ref(false)
 const busy = ref(false)
 const hasResult = ref(false)
 const error = ref('')
-const status = ref('等待选择图片')
+const status = ref('还没有图片')
 const fileName = ref('')
 const fileSize = ref(0)
 const srcW = ref(0)
 const srcH = ref(0)
 const resultSize = ref(0)
-const scale = ref('1') // 输出尺寸：1 / 0.75 / 0.5
-const zoom = ref('fit') // 预览：fit / 1 / 2
+const scale = ref('1')
+const zoom = ref('fit')
 const stageW = ref(0)
 const stageH = ref(0)
+const rainCols = ref([])
 
 let bitmap = null
 let resultUrl = ''
@@ -33,6 +33,7 @@ let worker
 let resizeObserver
 let syncingScroll = false
 let textureCache = null
+let rainResizeTimer = 0
 
 const outW = computed(() => Math.max(1, Math.round(srcW.value * Number(scale.value))))
 const outH = computed(() => Math.max(1, Math.round(srcH.value * Number(scale.value))))
@@ -45,6 +46,11 @@ const canvasStyle = computed(() => ({
   width: `${Math.max(1, outW.value * viewScale.value)}px`,
   height: `${Math.max(1, outH.value * viewScale.value)}px`,
 }))
+const scaleHint = computed(() => {
+  if (scale.value === '0.75') return '导出为原图的 75%。底纹会一起缩小，字还在，文件更小。'
+  if (scale.value === '0.5') return '导出为原图的一半。聊天软件如果再压缩一次，底纹可能变淡，发之前看右边。'
+  return '按原图像素导出。底纹最完整，也最接近你现在看到的效果。'
+})
 
 function formatBytes(n) {
   return n >= 1048576 ? `${(n / 1024 / 1024).toFixed(2)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
@@ -88,7 +94,7 @@ async function loadFile(file) {
   busy.value = true
   error.value = ''
   resetResult()
-  status.value = '正在读取图片…'
+  status.value = '正在读取图片，并按拍摄方向摆正…'
   try {
     const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
     if (id !== jobId) { bmp.close(); return }
@@ -105,8 +111,8 @@ async function loadFile(file) {
   } catch (e) {
     if (id !== jobId) return
     busy.value = false
-    status.value = '图片读取失败'
-    error.value = e instanceof Error ? e.message : '浏览器无法读取这张图片。'
+    status.value = '这张图读不了'
+    error.value = e instanceof Error ? e.message : '浏览器无法读取这张图片。换一张 PNG 或 JPG 试试。'
   }
 }
 
@@ -125,14 +131,13 @@ function onPaste(e) {
   if (file) { e.preventDefault(); loadFile(file) }
 }
 
-// 原图按原始分辨率送进 Worker 处理，回来后再缩放到“输出尺寸”
 async function process() {
   if (!bitmap) return
   const id = ++jobId
   busy.value = true
   resetResult()
   error.value = ''
-  status.value = '正在处理…'
+  status.value = '正在清理灰底、加入笔画扰动，并铺上底纹…'
   startedAt = performance.now()
   try {
     const tex = await loadTexture()
@@ -162,7 +167,7 @@ async function process() {
 
 async function onWorkerMessage(msg) {
   if (msg.id !== jobId) return
-  if ('stage' in msg) { status.value = '正在处理…'; return }
+  if ('stage' in msg) { status.value = '正在清理灰底、加入笔画扰动，并铺上底纹…'; return }
   if ('error' in msg) { error.value = msg.error; busy.value = false; status.value = '生成失败'; return }
   const full = document.createElement('canvas')
   full.width = msg.width
@@ -183,7 +188,8 @@ async function onWorkerMessage(msg) {
     resultSize.value = blob.size
     hasResult.value = true
     const ms = performance.now() - startedAt
-    status.value = `已生成 · ${ms < 1000 ? '< 1 秒' : `${(ms / 1000) | 0} 秒`}`
+    const time = ms < 1000 ? '不到 1 秒' : `${(ms / 1000) | 0} 秒`
+    status.value = `已生成，用时${time}。右边就是将要下载的图。`
   } else {
     error.value = '浏览器未能导出 PNG。'
     status.value = '导出失败'
@@ -207,11 +213,9 @@ function clearAll() {
   busy.value = false
   error.value = ''
   resetResult()
-  if (originalCanvas.value) originalCanvas.value.width = 0
-  status.value = '等待选择图片'
+  status.value = '还没有图片'
 }
 
-// 两个预览框同步滚动
 function syncScroll(e) {
   if (syncingScroll) return
   const from = e.currentTarget
@@ -223,6 +227,33 @@ function syncScroll(e) {
   requestAnimationFrame(() => { syncingScroll = false })
 }
 
+function buildRain() {
+  const font = 15
+  const count = Math.max(8, Math.ceil(window.innerWidth / font))
+  const rows = Math.max(24, Math.ceil(window.innerHeight / (font * 1.15)) + 2)
+  const cols = []
+  for (let i = 0; i < count; i++) {
+    let bits = ''
+    for (let r = 0; r < rows; r++) bits += (Math.random() > 0.5 ? '1' : '0') + '\n'
+    cols.push({
+      id: `${i}-${rows}`,
+      text: bits + bits,
+      style: {
+        left: `${i * font}px`,
+        animationDuration: `${12 + (i % 7) * 1.6 + (i % 3)}s`,
+        animationDelay: `${-((i * 1.7) % 18)}s`,
+        opacity: (0.62 + (i % 5) * 0.07).toFixed(2),
+      },
+    })
+  }
+  rainCols.value = cols
+}
+
+function onRainResize() {
+  window.clearTimeout(rainResizeTimer)
+  rainResizeTimer = window.setTimeout(buildRain, 180)
+}
+
 watch(scale, () => { if (bitmap) process() })
 watch(zoom, async () => {
   await nextTick()
@@ -230,6 +261,8 @@ watch(zoom, async () => {
 })
 
 onMounted(() => {
+  buildRain()
+  window.addEventListener('resize', onRainResize)
   worker = new Worker(new URL('./texture.worker.js', import.meta.url), { type: 'module' })
   worker.onmessage = (e) => onWorkerMessage(e.data)
   worker.onerror = (e) => { busy.value = false; error.value = e.message; status.value = '处理出错' }
@@ -242,6 +275,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   jobId++
+  window.clearTimeout(rainResizeTimer)
+  window.removeEventListener('resize', onRainResize)
   worker.terminate()
   resizeObserver.disconnect()
   bitmap?.close()
@@ -251,17 +286,51 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell" @dragover.prevent @drop.prevent>
+  <div class="binary-rain" aria-hidden="true">
+    <span v-for="col in rainCols" :key="col.id" class="rain-col" :style="col.style">{{ col.text }}</span>
+  </div>
+
+  <div class="app-shell" @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false" @drop.prevent="onDrop">
     <header class="topbar">
       <a class="brand" href="./" aria-label="OCR 底纹首页">
         <img src="/app-icon.svg" alt="" />
-        <span>OCR 底纹</span>
+        <span class="brand-text">
+          <span class="brand-kicker">本地图片工具</span>
+          <span class="brand-name">OCR 底纹</span>
+        </span>
       </a>
-      <span class="local-label">本地处理</span>
+      <p class="top-note">图片只在这台设备里处理，不会上传，也没有账号。</p>
     </header>
 
     <main class="workspace">
-      <section class="controls" aria-label="图片处理">
+      <section class="intro">
+        <div class="intro-copy">
+          <p class="eyebrow">不是打码，也不是去水印</p>
+          <h1>给人看的截图，不给机器一次认对</h1>
+          <p class="lede">
+            放进带文字的图片。工具会先把灰底收平，再在笔画附近加一层很浅的波纹，最后铺上固定底纹。亮的地方纹更明显，深色笔画上更淡，所以你自己还能读，文字识别在切字时更容易切错。字还留在图上。
+          </p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span>01</span>
+            <strong>放入图片</strong>
+            <p>点选、拖进页面，或直接粘贴。手机照片会按拍摄方向摆正。</p>
+          </li>
+          <li>
+            <span>02</span>
+            <strong>本机处理</strong>
+            <p>清理背景、加扰动、铺底纹，通常一两秒。图片不会离开这台设备。</p>
+          </li>
+          <li>
+            <span>03</span>
+            <strong>对照后下载</strong>
+            <p>左边是缩放后的原图，右边是加过底纹的结果。确认字还能读，再保存 PNG。</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="panel controls" aria-label="图片处理">
         <div class="upload-area">
           <button
             :class="['drop-zone', { dragging }]"
@@ -270,59 +339,106 @@ onBeforeUnmount(() => {
             @dragleave.prevent="dragging = false"
             @drop.prevent.stop="onDrop"
           >
-            <strong>{{ fileName ? '更换图片' : '选择图片' }}</strong>
-            <span>或拖入、粘贴</span>
+            <span class="drop-mark" aria-hidden="true"></span>
+            <span class="drop-copy">
+              <strong>{{ fileName ? '更换另一张图片' : '选择一张图片' }}</strong>
+              <span>拖到这里，或在页面上按 Ctrl / ⌘ + V 粘贴</span>
+            </span>
           </button>
           <input ref="fileInput" class="file-input" type="file" accept="image/*" aria-label="选择图片" @change="onFileChange" />
           <div v-if="fileName" class="file-info">
             <span class="file-name" :title="fileName">{{ fileName }}</span>
             <span>{{ srcW }} × {{ srcH }} · {{ formatBytes(fileSize) }}</span>
-            <button class="clear-button" @click="clearAll">清空</button>
+            <button class="clear-button" type="button" @click="clearAll">清空，重新开始</button>
           </div>
+          <p v-else class="field-hint">支持 PNG、JPG、WebP 等浏览器能打开的图片。处理完的文件名是 image-protected.png。</p>
         </div>
 
         <label class="size-control" for="output-size">
-          <span>输出尺寸</span>
+          <span>导出多大</span>
           <select id="output-size" v-model="scale" :disabled="busy">
             <option value="1">原始尺寸</option>
             <option value="0.75">75%</option>
             <option value="0.5">50%</option>
           </select>
+          <p class="field-hint">{{ scaleHint }}</p>
         </label>
 
-        <button class="download-button" :disabled="!hasResult || busy" @click="download">下载 PNG</button>
+        <div class="download-block">
+          <button class="download-button" type="button" :disabled="!hasResult || busy" @click="download">
+            {{ busy ? '正在处理…' : '下载处理后的 PNG' }}
+          </button>
+          <p class="field-hint">{{ hasResult ? '保存的就是右边这张，不是原图。' : '右边出结果之后，这个按钮才能点。' }}</p>
+        </div>
       </section>
 
-      <div v-if="fileName || busy" class="process-status" role="status" aria-live="polite">{{ status }}</div>
+      <p v-if="fileName || busy || error" :class="['process-status', { busy }]" role="status" aria-live="polite">{{ status }}</p>
       <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+
+      <section class="pipeline" aria-label="处理内容说明">
+        <div class="section-head">
+          <h2>结果里具体加了什么</h2>
+          <p>三步按顺序做，强度固定。不是把字涂掉。</p>
+        </div>
+        <div class="pipeline-grid">
+          <article>
+            <span>1</span>
+            <h3>背景清理</h3>
+            <p>大片灰色收成少数几个灰阶，接近白的底会更平；彩色部分稍微提一点饱和。去掉细碎噪点，让字和底分开。</p>
+          </article>
+          <article>
+            <span>2</span>
+            <h3>笔画扰动</h3>
+            <p>在文字附近加一层很浅的波纹。人看只觉得“有一点纹”，文字识别在二值化、切字符时更容易切错。</p>
+          </article>
+          <article>
+            <span>3</span>
+            <h3>底纹叠加</h3>
+            <p>铺一张固定纹理，强度 40%。越亮的地方叠得越重，越暗的笔画叠得越轻。字还在，干净的白底不在了。</p>
+          </article>
+        </div>
+      </section>
 
       <section class="preview-workspace" aria-label="图片对照">
         <div class="preview-toolbar">
+          <p>两个画面一起滚动。放大是为了检查底纹细不细，不影响导出大小。</p>
           <div class="zoom-controls" role="group" aria-label="预览缩放">
-            <button :class="{ active: zoom === 'fit' }" @click="zoom = 'fit'">适应画面</button>
-            <button :class="{ active: zoom === '1' }" @click="zoom = '1'">100%</button>
-            <button :class="{ active: zoom === '2' }" @click="zoom = '2'">200%</button>
+            <button type="button" :class="{ active: zoom === 'fit' }" @click="zoom = 'fit'">适应画面</button>
+            <button type="button" :class="{ active: zoom === '1' }" @click="zoom = '1'">100%</button>
+            <button type="button" :class="{ active: zoom === '2' }" @click="zoom = '2'">200%</button>
           </div>
         </div>
         <div class="preview-grid">
           <article class="preview-panel">
             <div class="panel-heading">
-              <h2>原图</h2>
+              <div>
+                <h2>原图</h2>
+                <p>只按导出尺寸缩放，还没加底纹。</p>
+              </div>
               <span v-if="fileName">{{ outW }} × {{ outH }}</span>
             </div>
             <div ref="originalStage" :class="['canvas-stage', { 'fit-mode': zoom === 'fit' }]" @scroll="syncScroll">
-              <canvas v-show="fileName" ref="originalCanvas" :style="canvasStyle" aria-label="原图预览"></canvas>
-              <div v-if="!fileName" class="empty-state">未选择图片</div>
+              <canvas v-if="fileName" ref="originalCanvas" :style="canvasStyle" aria-label="原图预览"></canvas>
+              <div v-if="!fileName" class="empty-state">
+                <strong>还没有原图</strong>
+                <span>选择、拖入或粘贴之后，缩放后的原图会显示在这里。</span>
+              </div>
             </div>
           </article>
           <article class="preview-panel">
             <div class="panel-heading">
-              <h2>处理结果</h2>
+              <div>
+                <h2>处理结果</h2>
+                <p>三步都做完。下载的就是这一张。</p>
+              </div>
               <span v-if="hasResult">{{ outW }} × {{ outH }} · {{ formatBytes(resultSize) }}</span>
             </div>
             <div ref="resultStage" :class="['canvas-stage', { 'fit-mode': zoom === 'fit' }]" @scroll="syncScroll">
-              <canvas v-show="hasResult" ref="resultCanvas" :style="canvasStyle" aria-label="处理结果预览"></canvas>
-              <div v-if="!hasResult" class="empty-state">{{ busy ? '处理中…' : '待处理' }}</div>
+              <canvas v-if="fileName" v-show="hasResult" ref="resultCanvas" :style="canvasStyle" aria-label="处理结果预览"></canvas>
+              <div v-if="!hasResult" class="empty-state">
+                <strong>{{ busy ? '正在处理' : '还没有结果' }}</strong>
+                <span>{{ busy ? '请稍等，完成前不要关掉页面。' : '处理完成后，在这里看字还能不能读、底纹会不会太重。' }}</span>
+              </div>
             </div>
           </article>
         </div>

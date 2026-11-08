@@ -1,6 +1,6 @@
 // 原站的 sw.js 由构建脚本生成，写死了带 hash 的文件名。
 // 这里改成运行时缓存：同源 GET 请求先走缓存，缓存没有再联网并存起来；页面导航优先联网，离线时回落到缓存的 index.html。
-const CACHE_NAME = 'ocr-image-tool-v1';
+const CACHE_NAME = 'ocr-image-tool-v2';
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(['/', '/index.html', '/texture.png', '/app-icon.svg'])).then(() => self.skipWaiting()));
 });

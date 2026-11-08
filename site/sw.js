@@ -1,40 +1,28 @@
-// Generated; caches application files only.
-const CACHE_NAME = 'ocr-image-tool-v9';
-const ASSETS = ["/app-icon-192.png","/app-icon-512.png","/app-icon.svg","/assets/index-I5qFkFm0.js","/assets/index-vD0hKg2T.css","/assets/texture.worker-BhDJqA30.js","/index.html","/manifest.webmanifest","/texture.png"];
-const STATIC_URLS = new Set(ASSETS.map((url) => new URL(url, self.location.origin).href));
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+// 原站的 sw.js 由构建脚本生成，写死了带 hash 的文件名。
+// 这里改成运行时缓存：同源 GET 请求先走缓存，缓存没有再联网并存起来；页面导航优先联网，离线时回落到缓存的 index.html。
+const CACHE_NAME = 'ocr-image-tool-v2';
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(['/', '/index.html', '/texture.png', '/app-icon.svg'])).then(() => self.skipWaiting()));
 });
-self.addEventListener('activate', (event) => {
-  event.waitUntil((async () => {
+self.addEventListener('activate', (e) => {
+  e.waitUntil((async () => {
     const keys = await caches.keys();
-    const oldKeys = keys.filter((key) => key.startsWith('ocr-image-tool-') && key !== CACHE_NAME);
-    await Promise.all(oldKeys.map((key) => caches.delete(key)));
+    await Promise.all(keys.filter((k) => k.startsWith('ocr-image-tool-') && k !== CACHE_NAME).map((k) => caches.delete(k)));
     await self.clients.claim();
-    if (oldKeys.length) {
-      const windows = await self.clients.matchAll({ type: 'window' });
-      for (const client of windows) {
-        if (new URL(client.url).origin === self.location.origin) {
-          void client.navigate(client.url).catch((error) => console.warn('Page upgrade failed:', error));
-        }
-      }
-    }
   })());
 });
-self.addEventListener('fetch', (event) => {
-  const request = event.request;
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
-  if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.open(CACHE_NAME).then((cache) => cache.match('/index.html', { ignoreVary: true }))));
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  if (req.mode === 'navigate') {
+    e.respondWith(fetch(req).catch(() => caches.match('/index.html', { ignoreVary: true })));
     return;
   }
-  if (STATIC_URLS.has(request.url)) {
-    event.respondWith(caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(request, { ignoreVary: true });
-      if (cached) return cached;
-      const response = await fetch(request);
-      if (response.ok) await cache.put(request, response.clone());
-      return response;
-    }));
-  }
+  e.respondWith(caches.open(CACHE_NAME).then(async (c) => {
+    const hit = await c.match(req, { ignoreVary: true });
+    if (hit) return hit;
+    const res = await fetch(req);
+    if (res.ok) c.put(req, res.clone());
+    return res;
+  }));
 });
