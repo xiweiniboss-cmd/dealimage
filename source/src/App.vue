@@ -23,7 +23,6 @@ const scale = ref('1')
 const zoom = ref('fit')
 const stageW = ref(0)
 const stageH = ref(0)
-const rainCols = ref([])
 
 let bitmap = null
 let resultUrl = ''
@@ -33,7 +32,6 @@ let worker
 let resizeObserver
 let syncingScroll = false
 let textureCache = null
-let rainResizeTimer = 0
 
 const outW = computed(() => Math.max(1, Math.round(srcW.value * Number(scale.value))))
 const outH = computed(() => Math.max(1, Math.round(srcH.value * Number(scale.value))))
@@ -227,33 +225,6 @@ function syncScroll(e) {
   requestAnimationFrame(() => { syncingScroll = false })
 }
 
-function buildRain() {
-  const font = 15
-  const count = Math.max(8, Math.ceil(window.innerWidth / font))
-  const rows = Math.max(24, Math.ceil(window.innerHeight / (font * 1.15)) + 2)
-  const cols = []
-  for (let i = 0; i < count; i++) {
-    let bits = ''
-    for (let r = 0; r < rows; r++) bits += (Math.random() > 0.5 ? '1' : '0') + '\n'
-    cols.push({
-      id: `${i}-${rows}`,
-      text: bits + bits,
-      style: {
-        left: `${i * font}px`,
-        animationDuration: `${12 + (i % 7) * 1.6 + (i % 3)}s`,
-        animationDelay: `${-((i * 1.7) % 18)}s`,
-        opacity: (0.62 + (i % 5) * 0.07).toFixed(2),
-      },
-    })
-  }
-  rainCols.value = cols
-}
-
-function onRainResize() {
-  window.clearTimeout(rainResizeTimer)
-  rainResizeTimer = window.setTimeout(buildRain, 180)
-}
-
 watch(scale, () => { if (bitmap) process() })
 watch(zoom, async () => {
   await nextTick()
@@ -261,8 +232,6 @@ watch(zoom, async () => {
 })
 
 onMounted(() => {
-  buildRain()
-  window.addEventListener('resize', onRainResize)
   worker = new Worker(new URL('./texture.worker.js', import.meta.url), { type: 'module' })
   worker.onmessage = (e) => onWorkerMessage(e.data)
   worker.onerror = (e) => { busy.value = false; error.value = e.message; status.value = '处理出错' }
@@ -275,8 +244,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   jobId++
-  window.clearTimeout(rainResizeTimer)
-  window.removeEventListener('resize', onRainResize)
   worker.terminate()
   resizeObserver.disconnect()
   bitmap?.close()
@@ -286,9 +253,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="binary-rain" aria-hidden="true">
-    <span v-for="col in rainCols" :key="col.id" class="rain-col" :style="col.style">{{ col.text }}</span>
-  </div>
+  <video class="binary-rain" autoplay muted loop playsinline aria-hidden="true" src="/binary-rain.mp4"></video>
 
   <div class="app-shell" @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false" @drop.prevent="onDrop">
     <header class="topbar">

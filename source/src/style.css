@@ -7,7 +7,6 @@
   --muted: #8fb3a0;
   --faint: #6d907c;
   --accent: #3dcc7a;
-  --rain: #7dffb0;
   --accent-ink: #062214;
   --danger: #e7a090;
   --font: "WenQuanYi Zen Hei", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
@@ -36,26 +35,12 @@ h1, h2, h3, p { margin: 0; }
   position: fixed;
   inset: 0;
   z-index: 0;
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   pointer-events: none;
-  opacity: 0.62;
-}
-.rain-col {
-  position: absolute;
-  top: 0;
-  color: var(--rain);
-  font-family: var(--mono);
-  font-size: 15px;
-  line-height: 1.15;
-  white-space: pre;
-  animation-name: rain-fall;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  will-change: transform;
-}
-@keyframes rain-fall {
-  from { transform: translate3d(0, -50%, 0); }
-  to { transform: translate3d(0, 0, 0); }
+  opacity: 0.36;
+  mix-blend-mode: screen;
 }
 .app-shell { position: relative; z-index: 1; min-height: 100vh; }
 .topbar {
@@ -272,7 +257,7 @@ h1 { font-size: 34px; line-height: 1.25; font-weight: 700; letter-spacing: -0.02
 }
 .empty-state strong { color: var(--text); font-size: 16px; }
 @media (prefers-reduced-motion: reduce) {
-  .rain-col { animation: none; opacity: 0.22; }
+  .binary-rain { display: none; }
 }
 @media (max-width: 860px) {
   .intro, .controls, .pipeline-grid, .preview-grid { grid-template-columns: 1fr; }
